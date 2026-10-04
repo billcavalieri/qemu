@@ -977,6 +977,20 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
                  */
                 h = tb_jmp_cache_hash_func(s.pc);
                 jc = cpu->tb_jmp_cache;
+#ifndef CONFIG_USER_ONLY
+            /*
+             * Optional native execution.  On success the guest state is
+             * complete in the CPU env; go back to the top so that pending
+             * interrupts are delivered before the next block is entered.
+             */
+            if (qatomic_read(&tcg_native_exec)
+                && cpu->cc->tcg_ops->try_native_exec
+                && cpu->cc->tcg_ops->try_native_exec(cpu, &s)) {
+                last_tb = NULL;
+                continue;
+            }
+#endif
+
                 jc->array[h].pc = s.pc;
                 qatomic_set(&jc->array[h].tb, tb);
             }
