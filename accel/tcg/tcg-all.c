@@ -254,6 +254,17 @@ static void tcg_set_one_insn_per_tb(Object *obj, bool value, Error **errp)
     s->one_insn_per_tb = value;
     /* Set the global also: this changes the behaviour */
     qatomic_set(&one_insn_per_tb, value);
+#ifndef CONFIG_USER_ONLY
+    /*
+     * Translations made in the other mode must not be entered any more.
+     * The indirect-branch path of some targets probes the jump cache
+     * without calling curr_cflags(), so do not rely on the lookup to
+     * reject them: drop them.  Nothing to do before the first vCPU exists.
+     */
+    if (first_cpu) {
+        queue_tb_flush(first_cpu);
+    }
+#endif
 }
 
 static void tcg_accel_class_init(ObjectClass *oc, const void *data)

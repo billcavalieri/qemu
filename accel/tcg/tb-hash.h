@@ -43,6 +43,11 @@ static inline unsigned int tb_jmp_cache_hash_page(vaddr pc)
     return (tmp >> (TARGET_PAGE_BITS - TB_JMP_PAGE_BITS)) & TB_JMP_PAGE_MASK;
 }
 
+/*
+ * NB: translator_lookup_and_goto_ptr() open-codes this function (system
+ * mode flavour) as TCG ops; keep the two in sync.  A mismatch is safe, the
+ * inline probe then always misses and uses the helper, but slow.
+ */
 static inline unsigned int tb_jmp_cache_hash_func(vaddr pc)
 {
     vaddr tmp;

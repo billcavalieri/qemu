@@ -162,6 +162,20 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
 bool translator_use_goto_tb(DisasContextBase *db, vaddr dest);
 
 /**
+ * translator_lookup_and_goto_ptr
+ * @pc: current guest pc, as passed to tb_lookup()
+ * @flags: current TB flags, as returned by get_tb_cpu_state()
+ *
+ * Like tcg_gen_lookup_and_goto_ptr(), but first probe the vCPU's
+ * tb_jmp_cache inline and continue directly at the TB when it hits,
+ * falling back to the lookup_tb_ptr helper on any miss.  Only valid for
+ * targets whose TBs have cs_base == 0 and !CF_PCREL, in system mode,
+ * on a 64-bit host, and not when generating icount or CF_NO_GOTO_PTR
+ * code or when exec logging is on; the caller must check those.
+ */
+void translator_lookup_and_goto_ptr(TCGv_i64 pc, TCGv_i32 flags);
+
+/**
  * translator_io_start
  * @db: Disassembly context
  *

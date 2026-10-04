@@ -2636,6 +2636,26 @@ static inline bool use_goto_tb(DisasContext *ctx, target_ulong dest)
     return translator_use_goto_tb(&ctx->base, dest);
 }
 
+/*
+ * Indirect exit to the TB for the new nip.  On a 64-bit target the hit path
+ * of the TB lookup is open-coded; everywhere else (and for icount, nochain
+ * and exec-logging runs) use the helper.
+ */
+static void gen_goto_nip_ptr(DisasContext *ctx)
+{
+#if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
+    if (!(tb_cflags(ctx->base.tb) & (CF_NO_GOTO_PTR | CF_USE_ICOUNT)) &&
+        !qemu_loglevel_mask(CPU_LOG_TB_CPU | CPU_LOG_EXEC | CPU_LOG_TB_NOCHAIN)) {
+        TCGv_i32 hf = tcg_temp_new_i32();
+
+        tcg_gen_ld_i32(hf, tcg_env, offsetof(CPUPPCState, hflags));
+        translator_lookup_and_goto_ptr(cpu_nip, hf);
+        return;
+    }
+#endif
+    tcg_gen_lookup_and_goto_ptr();
+}
+
 static void gen_lookup_and_goto_ptr(DisasContext *ctx)
 {
     if (unlikely(ctx->singlestep_flags)) {
@@ -2649,7 +2669,7 @@ static void gen_lookup_and_goto_ptr(DisasContext *ctx)
             pmu_count_insns(ctx);
         }
 
-        tcg_gen_lookup_and_goto_ptr();
+        gen_goto_nip_ptr(ctx);
     }
 }
 
@@ -5164,7 +5184,7 @@ static void ppc_tr_tb_stop(DisasContextBase *dcbase, CPUState *cs)
             pmu_count_insns(ctx);
         }
 
-        tcg_gen_lookup_and_goto_ptr();
+        gen_goto_nip_ptr(ctx);
         break;
 
     case DISAS_EXIT_UPDATE:
