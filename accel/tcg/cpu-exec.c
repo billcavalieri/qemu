@@ -374,6 +374,21 @@ static inline bool check_for_breakpoints(CPUState *cpu, vaddr pc,
  * If found, return the code pointer.  If not found, return
  * the tcg epilogue so that we return into cpu_tb_exec.
  */
+/*
+ * curr_cflags() lives in another file and is called for every indirect
+ * branch; the common case (no single-step, no one-insn-per-tb, no nochain
+ * logging) is just a load, so test for it inline.
+ */
+static inline uint32_t curr_cflags_fast(CPUState *cpu)
+{
+    if (likely(!cpu_single_stepping(cpu) &&
+               !qatomic_read(&one_insn_per_tb) &&
+               !qemu_loglevel_mask(CPU_LOG_TB_NOCHAIN))) {
+        return cpu->tcg_cflags;
+    }
+    return curr_cflags(cpu);
+}
+
 const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
 {
     CPUState *cpu = env_cpu(env);
@@ -389,7 +404,7 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
     cpu->neg.can_do_io = true;
 
     TCGTBCPUState s = cpu->cc->tcg_ops->get_tb_cpu_state(cpu);
-    s.cflags = curr_cflags(cpu);
+    s.cflags = curr_cflags_fast(cpu);
 
     if (check_for_breakpoints(cpu, s.pc, &s.cflags)) {
         cpu_loop_exit(cpu);
@@ -962,6 +977,20 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
                 break;
             }
 
+#ifndef CONFIG_USER_ONLY
+            /*
+             * Optional native execution.  On success the guest state is
+             * complete in the CPU env; go back to the top so that pending
+             * interrupts are delivered before the next block is entered.
+             */
+            if (qatomic_read(&tcg_native_exec)
+                && cpu->cc->tcg_ops->try_native_exec
+                && cpu->cc->tcg_ops->try_native_exec(cpu, &s)) {
+                last_tb = NULL;
+                continue;
+            }
+#endif
+
             tb = tb_lookup(cpu, s);
             if (tb == NULL) {
                 CPUJumpCache *jc;
@@ -977,20 +1006,6 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
                  */
                 h = tb_jmp_cache_hash_func(s.pc);
                 jc = cpu->tb_jmp_cache;
-#ifndef CONFIG_USER_ONLY
-            /*
-             * Optional native execution.  On success the guest state is
-             * complete in the CPU env; go back to the top so that pending
-             * interrupts are delivered before the next block is entered.
-             */
-            if (qatomic_read(&tcg_native_exec)
-                && cpu->cc->tcg_ops->try_native_exec
-                && cpu->cc->tcg_ops->try_native_exec(cpu, &s)) {
-                last_tb = NULL;
-                continue;
-            }
-#endif
-
                 jc->array[h].pc = s.pc;
                 qatomic_set(&jc->array[h].tb, tb);
             }
