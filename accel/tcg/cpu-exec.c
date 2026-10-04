@@ -977,6 +977,20 @@ cpu_exec_loop(CPUState *cpu, SyncClocks *sc)
                 break;
             }
 
+#ifndef CONFIG_USER_ONLY
+            /*
+             * Optional native execution.  On success the guest state is
+             * complete in the CPU env; go back to the top so that pending
+             * interrupts are delivered before the next block is entered.
+             */
+            if (qatomic_read(&tcg_native_exec)
+                && cpu->cc->tcg_ops->try_native_exec
+                && cpu->cc->tcg_ops->try_native_exec(cpu, &s)) {
+                last_tb = NULL;
+                continue;
+            }
+#endif
+
             tb = tb_lookup(cpu, s);
             if (tb == NULL) {
                 CPUJumpCache *jc;

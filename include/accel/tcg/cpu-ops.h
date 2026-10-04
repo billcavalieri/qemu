@@ -72,6 +72,18 @@ struct TCGCPUOps {
      */
     TCGTBCPUState (*get_tb_cpu_state)(CPUState *cs);
     /**
+     * @try_native_exec: Optionally run guest code without TCG
+     *
+     * Called from the main execution loop, after interrupts and
+     * breakpoints have been handled and before the TB lookup, when the
+     * accelerator option enabling native execution is set.  Return false
+     * to let TCG run the block at @s->pc unchanged.  Return true only if
+     * at least one guest instruction was executed; the guest state must
+     * then be complete in the CPU env, ready for the loop to deliver
+     * interrupts and continue.  May be NULL.
+     */
+    bool (*try_native_exec)(CPUState *cs, const TCGTBCPUState *s);
+    /**
      * @synchronize_from_tb: Synchronize state from a TCG #TranslationBlock
      *
      * This is called when we abandon execution of a TB before starting it,

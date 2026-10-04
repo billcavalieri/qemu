@@ -19,6 +19,9 @@ extern int64_t max_advance;
 
 extern bool one_insn_per_tb;
 
+/* Set by -accel tcg,ppc-arm64=on; enables TCGCPUOps.try_native_exec. */
+extern bool tcg_native_exec;
+
 extern bool icount_align_option;
 
 /*
