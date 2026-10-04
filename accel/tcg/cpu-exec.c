@@ -366,6 +366,21 @@ static inline bool check_for_breakpoints(CPUState *cpu, vaddr pc,
         check_for_breakpoints_slow(cpu, pc, cflags);
 }
 
+/*
+ * curr_cflags() lives in another file and is called for every lookup of an
+ * indirect branch target; the common case (no single-step, no
+ * one-insn-per-tb, no nochain logging) is just a load, so test for it inline.
+ */
+static inline uint32_t curr_cflags_fast(CPUState *cpu)
+{
+    if (likely(!cpu_single_stepping(cpu) &&
+               !qatomic_read(&one_insn_per_tb) &&
+               !qemu_loglevel_mask(CPU_LOG_TB_NOCHAIN))) {
+        return cpu->tcg_cflags;
+    }
+    return curr_cflags(cpu);
+}
+
 /**
  * helper_lookup_tb_ptr: quick check for next tb
  * @env: current cpu state
@@ -389,7 +404,7 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
     cpu->neg.can_do_io = true;
 
     TCGTBCPUState s = cpu->cc->tcg_ops->get_tb_cpu_state(cpu);
-    s.cflags = curr_cflags(cpu);
+    s.cflags = curr_cflags_fast(cpu);
 
     if (check_for_breakpoints(cpu, s.pc, &s.cflags)) {
         cpu_loop_exit(cpu);
