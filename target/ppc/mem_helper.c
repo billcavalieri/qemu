@@ -57,6 +57,11 @@ static void *probe_contiguous(CPUPPCState *env, target_ulong addr, uint32_t nb,
     nb_pg1 = -(addr | TARGET_PAGE_MASK);
     if (likely(nb <= nb_pg1)) {
         /* The entire operation is on a single page.  */
+        void *host = tlb_fast_host_ptr(env, addr, access_type, mmu_idx);
+
+        if (likely(host)) {
+            return host;
+        }
         return probe_access(env, addr, nb, access_type, mmu_idx, raddr);
     }
 
