@@ -85,6 +85,15 @@ void tcg_gen_goto_tb(unsigned idx);
  */
 void tcg_gen_lookup_and_goto_ptr(void);
 
+/**
+ * tcg_gen_goto_ptr() - output goto_ptr TCG operation
+ * @ptr: host address of the code to continue with
+ *
+ * Exit the current TB and continue directly at @ptr, which must be the
+ * entry point of a valid TB (or the TCG epilogue).
+ */
+void tcg_gen_goto_ptr(TCGv_ptr ptr);
+
 void tcg_gen_plugin_cb(unsigned from);
 void tcg_gen_plugin_mem_cb(TCGv_i64 addr, unsigned meminfo);
 

@@ -20,6 +20,8 @@
 #include "internal-common.h"
 #include "disas/disas.h"
 #include "tb-internal.h"
+#include "tb-jmp-cache.h"
+#include "tb-hash.h"
 
 static void set_can_do_io(DisasContextBase *db, bool val)
 {
@@ -528,3 +530,65 @@ void translator_fake_ld(DisasContextBase *db, const void *data, size_t len)
     db->fake_insn = true;
     record_save(db, db->pc_first, data, len);
 }
+
+#if !defined(CONFIG_USER_ONLY) && UINTPTR_MAX == UINT64_MAX
+void translator_lookup_and_goto_ptr(TCGv_i64 pc, TCGv_i32 flags)
+{
+    /*
+     * Open-coded tb_lookup() hit path, mirroring helper_lookup_tb_ptr():
+     * the same tb_jmp_cache entry and the same pc, flags and cflags checks
+     * (cs_base is 0 for the targets allowed to use this).  Anything else,
+     * including breakpoints being present, goes to the helper.
+     */
+    const int sh = TARGET_PAGE_BITS - TB_JMP_PAGE_BITS;
+    TCGLabel *slow = gen_new_label();
+    TCGv_i64 jc = tcg_temp_new_i64();
+    TCGv_i64 idx = tcg_temp_new_i64();
+    TCGv_i64 tmp = tcg_temp_new_i64();
+    TCGv_ptr p = tcg_temp_new_ptr();
+    TCGv_i32 a = tcg_temp_new_i32();
+    TCGv_i32 b = tcg_temp_new_i32();
+
+    /* env sits right after CPUState, hence the sizeof(CPUState) bias. */
+    tcg_gen_ld_i64(tmp, tcg_env,
+                   offsetof(CPUState, breakpoints.tqh_first) -
+                   sizeof(CPUState));
+    tcg_gen_brcondi_i64(TCG_COND_NE, tmp, 0, slow);
+
+    /* tb_jmp_cache_hash_func(), system-mode flavour. */
+    tcg_gen_shri_i64(tmp, pc, sh);
+    tcg_gen_xor_i64(tmp, tmp, pc);
+    tcg_gen_shri_i64(idx, tmp, sh);
+    tcg_gen_andi_i64(idx, idx, TB_JMP_PAGE_MASK);
+    tcg_gen_andi_i64(tmp, tmp, TB_JMP_ADDR_MASK);
+    tcg_gen_or_i64(idx, idx, tmp);
+    tcg_gen_muli_i64(idx, idx, sizeof(((CPUJumpCache *)0)->array[0]));
+    tcg_gen_ld_i64(jc, tcg_env,
+                   offsetof(CPUState, tb_jmp_cache) - sizeof(CPUState));
+    tcg_gen_add_i64(idx, idx, jc);
+    tcg_gen_trunc_i64_ptr(p, idx);
+
+    tcg_gen_ld_i64(tmp, p, offsetof(CPUJumpCache, array[0].pc));
+    tcg_gen_brcond_i64(TCG_COND_NE, tmp, pc, slow);
+    tcg_gen_ld_ptr(p, p, offsetof(CPUJumpCache, array[0].tb));
+    tcg_gen_brcondi_ptr(TCG_COND_EQ, p, 0, slow);
+
+    tcg_gen_ld_i32(a, p, offsetof(TranslationBlock, flags));
+    tcg_gen_brcond_i32(TCG_COND_NE, a, flags, slow);
+    tcg_gen_ld_i32(a, p, offsetof(TranslationBlock, cflags));
+    tcg_gen_ld_i32(b, tcg_env,
+                   offsetof(CPUState, tcg_cflags) - sizeof(CPUState));
+    tcg_gen_brcond_i32(TCG_COND_NE, a, b, slow);
+
+    tcg_gen_ld_ptr(p, p, offsetof(TranslationBlock, tc.ptr));
+    tcg_gen_goto_ptr(p);
+
+    gen_set_label(slow);
+    tcg_gen_lookup_and_goto_ptr();
+}
+#else
+void translator_lookup_and_goto_ptr(TCGv_i64 pc, TCGv_i32 flags)
+{
+    tcg_gen_lookup_and_goto_ptr();
+}
+#endif
