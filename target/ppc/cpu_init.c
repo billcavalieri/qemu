@@ -7519,6 +7519,9 @@ static const struct SysemuCPUOps ppc_sysemu_ops = {
 
 #ifdef CONFIG_TCG
 #include "accel/tcg/cpu-ops.h"
+#if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
+#include "arm64-jit/jit.h"
+#endif
 
 static const TCGCPUOps ppc_tcg_ops = {
   .mttcg_supported = TARGET_LONG_BITS == 64,
@@ -7526,6 +7529,9 @@ static const TCGCPUOps ppc_tcg_ops = {
   .initialize = ppc_translate_init,
   .translate_code = ppc_translate_code,
   .get_tb_cpu_state = ppc_get_tb_cpu_state,
+#if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
+  .try_native_exec = ppc_try_arm64_exec,
+#endif
   .restore_state_to_opc = ppc_restore_state_to_opc,
   .mmu_index = ppc_cpu_mmu_index,
 
