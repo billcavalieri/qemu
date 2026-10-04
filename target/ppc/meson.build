@@ -53,6 +53,16 @@ ppc_system_ss.add(when: 'CONFIG_TCG', if_true: files(
 ))
 ppc_system_ss.add(when: 'CONFIG_KVM', if_true: files('kvm.c'))
 
+# Experimental PowerPC 970 -> AArch64 direct execution path.  The entry point
+# is always built (a stub on other hosts); the executable-memory support only
+# makes sense on aarch64 hosts.
+ppc_system_ss.add(when: ['CONFIG_TCG', 'TARGET_PPC64'],
+                  if_true: files('arm64-jit/exec.c'))
+if host_arch == 'aarch64'
+  ppc_system_ss.add(when: ['CONFIG_TCG', 'TARGET_PPC64'],
+                    if_true: files('arm64-jit/region.c'))
+endif
+
 ppc_system_ss.add(when: 'TARGET_PPC64', if_true: files(
   'compat.c',
   'mmu-book3s-v3.c',
