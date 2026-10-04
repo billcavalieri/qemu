@@ -123,4 +123,24 @@ int probe_access_full_mmu(CPUArchState *env, vaddr addr, int size,
 void *tlb_vaddr_to_host(CPUArchState *env, vaddr addr,
                         MMUAccessType access_type, int mmu_idx);
 
+/**
+ * tlb_fast_host_ptr:
+ * @env: CPUArchState
+ * @addr: guest virtual address
+ * @access_type: read, write or instruction fetch
+ * @mmu_idx: MMU index to use for lookup
+ *
+ * Return the host address for @addr if, and only if, the access would
+ * be handled entirely by the inline fast path of generated code: the
+ * page is present in the soft TLB for @access_type with no flag bits set
+ * (so it is plain RAM, clean for writes, with no watchpoint or other
+ * slow-path reason), and plugin memory callbacks are not active.
+ * Otherwise return NULL and let the caller use probe_access().  It never
+ * faults, fills the TLB or has any other side effect, and is much cheaper
+ * than probe_access().  The caller must ensure the access does not cross
+ * a page boundary.
+ */
+void *tlb_fast_host_ptr(CPUArchState *env, vaddr addr,
+                        MMUAccessType access_type, int mmu_idx);
+
 #endif

@@ -1514,6 +1514,22 @@ void *probe_access(CPUArchState *env, vaddr addr, int size,
     return host;
 }
 
+void *tlb_fast_host_ptr(CPUArchState *env, vaddr addr,
+                        MMUAccessType access_type, int mmu_idx)
+{
+    CPUState *cpu = env_cpu(env);
+    CPUTLBEntry *entry = tlb_entry(cpu, mmu_idx, addr);
+    uint64_t tlb_addr = tlb_read_idx(entry, access_type);
+
+    /* The same test the inline fast path makes: page matches, no flags. */
+    if (likely(tlb_hit_page(tlb_addr, addr & TARGET_PAGE_MASK) &&
+               !(tlb_addr & TLB_FLAGS_MASK) &&
+               !cpu_plugin_mem_cbs_enabled(cpu))) {
+        return (void *)((uintptr_t)addr + entry->addend);
+    }
+    return NULL;
+}
+
 void *tlb_vaddr_to_host(CPUArchState *env, vaddr addr,
                         MMUAccessType access_type, int mmu_idx)
 {
